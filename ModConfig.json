@@ -1,0 +1,70 @@
+{
+  "ModId": "WotLCharacters",
+  "ModName": "WotL Restoration",
+  "ModAuthor": "Dana Crysalis",
+  "ModVersion": "2.0.0",
+  "ModDescription": "Adds War of the Lions characters and items and restores their events: Agrias's Birthday (with WotL's Tynar Rouge), Delita and Ovelia at Zeirchele Falls, Wiegraf mourning Milleuda as Loffrey recruits him, Ovelia's prayer and the assassins at Zeltennia's chapel ruins, Delita and Ovelia at Bervenia, Argath's return at Limberry, Cletienne and Meliadoul at Dorter, Agrias visiting Ovelia, Beowulf and Reis against Celebrant Bremondt, Agrias and Orlandeau against the Northern Sky deserters, the Rash of Thefts and A Call for Guards, Disorder in the Order and Lionel's New Liege Lord rumors, Balthier's battle and recruitment, and Luso's battle and recruitment",
+  "ModDll": "WotLCharacters.dll",
+  "ModIcon": "Preview.png",
+  "ModR2RManagedDll32": "x86/WotLCharacters.dll",
+  "ModR2RManagedDll64": "x64/WotLCharacters.dll",
+  "ModNativeDll32": "",
+  "ModNativeDll64": "",
+  "Tags": [],
+  "CanUnload": false,
+  "HasExports": false,
+  "IsLibrary": false,
+  "ReleaseMetadataFileName": "WotLCharacters.ReleaseMetadata.json",
+  "IgnoreRegexes": [
+    ".*\\.json"
+  ],
+  "IncludeRegexes": [
+    "\\.deps\\.json",
+    "\\.runtimeconfig\\.json",
+    "ModConfig\\.json"
+  ],
+  "PluginData": {
+    "GitHubDependencies": {
+      "IdToConfigMap": {
+        "Reloaded.Memory.SigScan.ReloadedII": {
+          "Config": {
+            "UserName": "Reloaded-Project",
+            "RepositoryName": "Reloaded.Memory.SigScan",
+            "UseReleaseTag": false,
+            "AssetFileName": "Mod.zip"
+          },
+          "ReleaseMetadataName": "Reloaded.Memory.SigScan.ReloadedII.ReleaseMetadata.json"
+        },
+        "reloaded.sharedlib.hooks": {
+          "Config": {
+            "UserName": "Sewer56",
+            "RepositoryName": "Reloaded.SharedLib.Hooks.ReloadedII",
+            "UseReleaseTag": true,
+            "AssetFileName": "reloaded.sharedlib.hooks.zip"
+          },
+          "ReleaseMetadataName": "Sewer56.Update.ReleaseMetadata.json"
+        },
+        "fftivc.utility.modloader": {
+          "Config": {
+            "UserName": "Nenkai",
+            "RepositoryName": "fftivc.utility.modloader",
+            "UseReleaseTag": true,
+            "AssetFileName": "Mod.zip"
+          },
+          "ReleaseMetadataName": "fftivc.utility.modloader.ReleaseMetadata.json"
+        }
+      }
+    }
+  },
+  "IsUniversalMod": false,
+  "ModDependencies": [
+    "Reloaded.Memory.SigScan.ReloadedII",
+    "reloaded.sharedlib.hooks",
+    "fftivc.utility.modloader"
+  ],
+  "OptionalDependencies": [],
+  "SupportedAppId": [
+    "fft_enhanced.exe"
+  ],
+  "ProjectUrl": ""
+}

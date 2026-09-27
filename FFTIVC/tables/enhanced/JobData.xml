@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+WotL Restoration - job table edits (fftivc.utility.modloader).
+Only edited properties are listed so other mods can edit the same jobs.
+
+The WotL special units use spritesets of 0x82 and above, so the game takes their portrait from
+portrait table[MonsterPortrait of their job] instead of indexing the table by spriteset.
+Balthier and Luso are hardcoded by spriteset and need no change here. Mod.cs points portrait table
+entries 165-168 at face ids that map to wldface_165..168.
+
+EquippableItems: TIC lets every human job wear hair adornments and perfumes, so the WotL human jobs get
+HairAdornment and Perfume added to their vanilla equipment.
+-->
+
+<JobTable>
+  <Version>1</Version>
+  <Entries>
+    <Job>
+      <Id>162</Id> <!-- Sky Pirate (Balthier) -->
+      <EquippableItems>Perfume, Cloak, Armlet, Ring, Armguard, Shoes, Robe, Clothing, Armor, HairAdornment, Hat, Helmet, Shield, Polearm, Bow, Crossbow, Gun, KnightSword, Sword, Knife, Unarmed</EquippableItems>
+    </Job>
+    <Job>
+      <Id>163</Id> <!-- Game Hunter (Luso) -->
+      <EquippableItems>Perfume, Cloak, Armlet, Ring, Armguard, Shoes, Robe, Clothing, Armor, HairAdornment, Hat, Helmet, Shield, Flail, KnightSword, Sword, Knife, Unarmed</EquippableItems>
+    </Job>
+    <Job>
+      <Id>165</Id> <!-- Deathknight (Argath) -> wldface_165 -->
+      <EquippableItems>Perfume, Cloak, Armlet, Ring, Armguard, Shoes, Robe, Armor, HairAdornment, Helmet, Shield, Sword, Unarmed</EquippableItems>
+      <MonsterPortrait>165</MonsterPortrait>
+    </Job>
+    <Job>
+      <Id>166</Id> <!-- Templar -> wldface_166 -->
+      <EquippableItems>Perfume, Cloak, Armlet, Ring, Armguard, Shoes, Robe, Armor, HairAdornment, Helmet, Shield, KnightSword, Sword, Knife, Unarmed</EquippableItems>
+      <MonsterPortrait>166</MonsterPortrait>
+    </Job>
+    <Job>
+      <Id>167</Id> <!-- Celebrant (Bremondt) -> wldface_167 -->
+      <EquippableItems>Perfume, Cloak, Armlet, Ring, Armguard, Shoes, Robe, Clothing, HairAdornment, Hat, Pole, Book, Staff, Rod, Unarmed</EquippableItems>
+      <MonsterPortrait>167</MonsterPortrait>
+    </Job>
+    <Job>
+      <Id>168</Id> <!-- Dark Dragon -> wldface_168 (was 148) -->
+      <MonsterPortrait>168</MonsterPortrait>
+    </Job>
+  </Entries>
+</JobTable>

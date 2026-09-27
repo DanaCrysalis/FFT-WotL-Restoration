@@ -1,0 +1,575 @@
+<title>WotL Restoration Internals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --bg:#f5f3f1; --surface:#ffffff; --ink:#221c1d; --muted:#6a5f61; --rule:#e0d8d6;
+  --accent:#8e2c35; --accent-soft:#f6e6e7; --code-bg:#f0ebea; --warn:#9a6414; --ok:#2f7a4a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151112; --surface:#1e1819; --ink:#ece4e4; --muted:#a8999b; --rule:#3a2f31;
+    --accent:#e0848c; --accent-soft:#35202338; --code-bg:#2a2223; --warn:#e2ac5c; --ok:#6fc58f;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151112; --surface:#1e1819; --ink:#ece4e4; --muted:#a8999b; --rule:#3a2f31;
+  --accent:#e0848c; --accent-soft:#35202338; --code-bg:#2a2223; --warn:#e2ac5c; --ok:#6fc58f;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font:16px/1.62 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; padding-inline:20px; padding-block:40px 72px}
+main{max-width:800px; margin:0 auto; display:flex; flex-direction:column; gap:44px}
+h1,h2,h3{font-family:"Alegreya SC", Georgia, serif; text-wrap:balance; line-height:1.2; margin:0}
+h1{font-size:2.4rem; font-weight:700; letter-spacing:.01em}
+h2{font-size:1.6rem; font-weight:700; padding-bottom:6px; border-bottom:2px solid var(--accent)}
+h3{font-size:1.18rem; font-weight:500; color:var(--accent); margin-top:6px}
+section{display:flex; flex-direction:column; gap:14px; scroll-margin-top:16px}
+p,ul,ol{margin:0; max-width:70ch}
+ul,ol{padding-left:1.3em; display:flex; flex-direction:column; gap:6px}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+code,.mono{font-family:"IBM Plex Mono", Consolas, monospace; font-size:.87em}
+code{background:var(--code-bg); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere}
+pre{margin:0; background:var(--code-bg); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; font:13.5px/1.5 "IBM Plex Mono", Consolas, monospace; max-width:100%}
+pre code{background:none; padding:0; font-size:1em}
+.eyebrow{font:500 .78rem/1 "IBM Plex Mono", Consolas, monospace; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+.lede{font-size:1.08rem; color:var(--muted)}
+.meta{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:.86rem; color:var(--muted)}
+.table-wrap{overflow-x:auto; border:1px solid var(--rule); border-radius:8px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:.9rem}
+th,td{text-align:left; vertical-align:top; padding:8px 12px; border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:none}
+th{font-weight:600; font-size:.78rem; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); background:var(--code-bg)}
+td.mono,td .nw{white-space:nowrap}
+td{font-variant-numeric:tabular-nums}
+.callout{border-left:3px solid var(--warn); background:var(--surface); padding:12px 16px; border-radius:0 8px 8px 0; font-size:.95rem; max-width:70ch}
+.callout.ok{border-left-color:var(--ok)}
+nav.toc{background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:16px 20px}
+nav.toc ol{columns:2 280px; column-gap:28px; display:block; padding-left:1.4em}
+nav.toc li{margin:0 0 5px; break-inside:avoid}
+nav.toc li::marker{font-family:"IBM Plex Mono", Consolas, monospace; color:var(--muted); font-size:.85em}
+ol.steps{gap:10px}
+ol.steps li::marker{font-family:"IBM Plex Mono", Consolas, monospace; color:var(--accent); font-weight:500}
+.two{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px}
+.card{background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:14px 16px; display:flex; flex-direction:column; gap:6px; font-size:.94rem}
+.card b{font-family:"Alegreya SC", Georgia, serif; font-size:1.05rem; color:var(--accent); font-weight:500}
+.tag{display:inline-block; font:500 .72rem/1.5 "IBM Plex Mono", Consolas, monospace; padding:0 6px; border-radius:4px; border:1px solid var(--rule); color:var(--muted); white-space:nowrap}
+.tag.ok{color:var(--ok); border-color:var(--ok)}
+.tag.warn{color:var(--warn); border-color:var(--warn)}
+@media (max-width:620px){ h1{font-size:1.95rem} h2{font-size:1.4rem} }
+footer{font-size:.85rem; color:var(--muted); border-top:1px solid var(--rule); padding-top:16px}
+</style>
+
+<main>
+<header style="display:flex;flex-direction:column;gap:12px">
+  <div class="eyebrow">FFT: The Ivalice Chronicles · Reloaded-II mod · ModId WotLCharacters</div>
+  <h1>WotL Restoration: how it works</h1>
+  <p class="lede">A walkthrough of every part of the WotL Restoration mod, written so you can repeat or extend the work from the game files alone. It covers the War of the Lions scenes, battles, rumors, characters, items, maps and battle minimaps the mod puts back into Ivalice Chronicles.</p>
+  <div class="meta"><span>Mod version 2.0.0</span><span>Steam build of 2026-09-17</span><span>Addresses are RVAs unless marked "file offset"</span></div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#overview">What the mod does</a></li>
+    <li><a href="#tools">What you need</a></li>
+    <li><a href="#layout">How the mod is put together</a></li>
+    <li><a href="#rules">Rules that apply everywhere</a></li>
+    <li><a href="#wotl">Reading War of the Lions' data</a></li>
+    <li><a href="#events">How IC runs an event</a></li>
+    <li><a href="#port">Porting a WotL event</a></li>
+    <li><a href="#convert">Converting a WotL script</a></li>
+    <li><a href="#art">Event art and sprites</a></li>
+    <li><a href="#chars">Characters, jobs and portraits</a></li>
+    <li><a href="#rumors">Tavern rumors</a></li>
+    <li><a href="#story">Putting scenes back into the story</a></li>
+    <li><a href="#maps">Maps</a></li>
+    <li><a href="#minimap">The multi-stage battle minimap</a></li>
+    <li><a href="#items">WotL's 40 items</a></li>
+    <li><a href="#birthday">Agrias's Birthday reward</a></li>
+    <li><a href="#catalog">Scene catalog</a></li>
+    <li><a href="#status">Status and open questions</a></li>
+  </ol>
+</nav>
+
+<section id="overview">
+  <h2>What the mod does</h2>
+  <p>Ivalice Chronicles (IC) is built on the PSX game, but its data still carries a lot of War of the Lions (WotL). The exe has WotL's event setup records 512–599, the ENTD casts for them, WotL's item code and most of its item tables. What it lacks is everything that makes those records play: scripts, text, triggers, battle rules, some art, and the table rows the enhanced UI needs.</p>
+  <p>The mod fills those gaps. In outline:</p>
+  <ul>
+    <li><b>Every WotL-only story scene (events 512–581)</b>: Balthier, Luso, Agrias's Birthday, Zeirchele Falls, Argath at Limberry, Beowulf and Reis, and the rest (see the <a href="#catalog">catalog</a>). Each one fires under WotL's own conditions.</li>
+    <li><b>Four restored tavern rumors</b>, which unlock Balthier, Beowulf and Reis, and the Deserters battle.</li>
+    <li><b>WotL's characters as proper units</b>: names, jobs, job commands, sprite shapes and portraits for Balthier, Luso, Argath the Deathknight, Aliste, Bremondt and the Dark Dragon.</li>
+    <li><b>All 40 WotL items</b> in the item tables, with WotL's own ids, names, icons and effects.</li>
+    <li><b>WotL's map 127</b> (Limberry Castle Inner Court), a battle surface for a cutscene-only map, and a 4-stage version of IC's Limberry battle minimap.</li>
+  </ul>
+</section>
+
+<section id="tools">
+  <h2>What you need</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Tool</th><th>Used for</th></tr>
+    <tr><td>Reloaded-II with <b>fftivc.utility.modloader</b></td><td>Serves the mod's files in place of the game's, merges nxd rows from several mods, and applies <code>JobData.xml</code> edits.</td></tr>
+    <tr><td><b>FF16Tools.CLI</b> (Nenkai)</td><td><code>nxd-to-sqlite</code> / <code>sqlite-to-nxd -g fft</code> to edit nxd tables as SQLite. <code>pzd-conv</code> turns YAML into scenario text files. <code>tex-conv</code> and <code>img-conv</code> convert textures. <code>unpack-save</code> opens save files.</td></tr>
+    <tr><td>010 Editor + Nenkai's 010GameTemplates</td><td><code>Square Enix/Final Fantasy 16/FF16_uib_UIBinary.bt</code> reads IC's <code>.uib</code> UI layouts (IC's are version 10).</td></tr>
+    <tr><td>A disassembler (Ghidra, IDA, x64dbg)</td><td>Finding the exe code for hooks and bounds.</td></tr>
+    <tr><td>The WotL PSP ISO (USA)</td><td>Source of scripts, text, triggers, battle rules, item data and rumor data.</td></tr>
+    <tr><td>Any scripting language</td><td>The mod's own build is Python. None of its steps need anything beyond reading and writing bytes and SQLite.</td></tr>
+  </table></div>
+</section>
+
+<section id="layout">
+  <h2>How the mod is put together</h2>
+  <p>The mod has two halves. The data half is plain files under <code>FFTIVC/</code>, which the modloader serves in place of the game's own. The code half is a small Reloaded-II DLL that patches the exe in memory at startup. It only does what data can't.</p>
+  <h3>Files the mod ships</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Path under FFTIVC/</th><th>What it is</th></tr>
+    <tr><td class="mono">data/enhanced/script/enhanced/eventNNN.e</td><td>70 event scripts: converted WotL scenes, plus stubs (copies of vanilla <code>event000.e</code>)</td></tr>
+    <tr><td class="mono">data/enhanced/nxd/text/scenario/scenarioNNNN.en.pzd</td><td>The scenes' text, one file per scene group</td></tr>
+    <tr><td class="mono">data/enhanced/nxd/*.nxd</td><td>38 tables: events, triggers, battle rules, text lookup, characters, items, map names, minimap rows (listed in the sections below)</td></tr>
+    <tr><td class="mono">data/enhanced/system/ffto/g2d/tex_NNNN.bin</td><td>Enhanced-mode textures for event sprite sheets</td></tr>
+    <tr><td class="mono">data/enhanced/ui/ffto/common/face/…</td><td>Portrait textures for the six WotL characters (<code>wldface_163…168</code>)</td></tr>
+    <tr><td class="mono">data/enhanced/ui/ffto/icon/equip_item(_s)/…</td><td>Large and small icons for the 40 items</td></tr>
+    <tr><td class="mono">data/enhanced/ui/ffto/battle/ffto_battle_continuous_map.uib</td><td>The battle minimap layouts, with Limberry rebuilt for 4 stages</td></tr>
+    <tr><td class="mono">data/enhanced/bg/meshes/map_045_mesh.bin, map_127_mesh.bin</td><td>HD map meshes: map 45 with a battle surface added, and map 127 (a copy of map 66)</td></tr>
+    <tr><td class="mono">data/enhanced/bg/textures/127/</td><td>Map 127's HD textures (map 66's, 13 files)</td></tr>
+    <tr><td class="mono">tables/enhanced/JobData.xml</td><td>Equipment and portrait fields for the WotL jobs</td></tr>
+  </table></div>
+  <h3>What the DLL does</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Part</th><th>Why data can't do it</th></tr>
+    <tr><td>Portrait tables and face map</td><td>Hard-coded arrays in the exe (<a href="#chars">Characters</a>)</td></tr>
+    <tr><td>Monster palette pointer</td><td>A null pointer the game reads when drawing these portraits</td></tr>
+    <tr><td>Rumor town masks</td><td>A u32 table in the exe (<a href="#rumors">Rumors</a>)</td></tr>
+    <tr><td>Event setup record patches</td><td>Setup records live in the exe (<a href="#story">Story links</a>)</td></tr>
+    <tr><td>Item expansion</td><td>Arrays and bounds sized for 261 items, plus getter hooks (<a href="#items">Items</a>)</td></tr>
+    <tr><td>Birthday reward</td><td>A hook on the event variable dispatcher (<a href="#birthday">Birthday</a>)</td></tr>
+  </table></div>
+  <p>Every exe location is found by a byte signature, and the bytes are checked before they're patched. If a game update moves or changes something, that feature logs a warning and stays off, rather than writing into the wrong place.</p>
+</section>
+
+<section id="rules">
+  <h2>Rules that apply everywhere</h2>
+  <h3>Editing nxd tables</h3>
+  <p>Convert a folder of <code>.nxd</code> files to SQLite with <code>FF16Tools.CLI nxd-to-sqlite -i in -o db.sqlite -g fft</code>, edit the rows, and convert back with <code>sqlite-to-nxd -i db.sqlite -o out -g fft -t Table1 Table2 …</code>. Ship only the tables you changed. The modloader compares each shipped table with vanilla and merges the added or changed rows. Its log says so ("Processing 2 added rows for nex table 'entryno'"), so two mods can add rows to the same table.</p>
+  <p>The exported tables have no primary key, so delete a row before re-inserting it rather than using <code>INSERT OR REPLACE</code>.</p>
+  <h3>Base-row-id tables must stay contiguous</h3>
+  <p>A single-keyed table whose header sets <code>use_base_row_id</code> is read as a plain array: the row for key <i>k</i> is at position <i>k</i> − first key. Adding key 514 after a table that ends at 511 puts it at position 512, and the game reads past the end. It crashed on Balthier's EntryNo row for exactly this reason.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Kind</th><th>Tables this mod touches</th><th>Adding a row</th></tr>
+    <tr><td>Base row id (array)</td><td>EntryNo, CharShape, Item-*, UIItemCategory-*, Gossip-*, EventId</td><td>Fill every key up to yours, with blank rows if needed</td></tr>
+    <tr><td>Sparse or hashed</td><td>Caption, PlaceName-*, RefinedBgMeshNode, Speaker-*, ScenarioId, ScionFiles, ContinuousSortieConfirm</td><td>Any free key works</td></tr>
+  </table></div>
+  <p>The lookup for single-keyed tables is at RVA 0x3D3AE8. It has three modes: array (base row id), a sparse pointer array over min..max, or a hash.</p>
+  <h3>Which files can be added</h3>
+  <ul>
+    <li><b>Path-based files</b> (<code>bg/…</code>, <code>ui/…</code>, <code>nxd/…</code>, <code>script/…</code>, <code>system/…</code>) can be new. The mod adds a new scenario text file, map 127's mesh and a texture folder.</li>
+    <li><b>fftpack files</b> are addressed by index. The modloader can only replace an index that already exists (its list is <code>FileLists/fftpack.txt</code>), so you can't add classic map data, new ENTD files or new sprite files.</li>
+  </ul>
+  <h3>Finding things in the exe</h3>
+  <p>The Steam build has no Denuvo, so disk bytes are memory bytes: an RVA is file offset + the section delta. Always patch through a signature and check the old bytes first.</p>
+</section>
+
+<section id="wotl">
+  <h2>Reading War of the Lions' data</h2>
+  <p>Everything comes from two files on the PSP ISO: <code>PSP_GAME/SYSDIR/BOOT.BIN</code> (an unencrypted ELF) and <code>PSP_GAME/USRDIR/fftpack.bin</code>.</p>
+  <h3>fftpack.bin</h3>
+  <p>The header is a u32 file count (3968), a u32 0x10, then count + 1 u32 byte offsets from the start of the pack. File <i>n</i> spans offset[n] to offset[n+1].</p>
+  <div class="table-wrap"><table>
+    <tr><th>File</th><th>Contents</th></tr>
+    <tr><td class="mono">21</td><td>TEST.EVT, the event archive: <b>0x2800-byte records</b> (PSX used 0x2000), 744 events</td></tr>
+    <tr><td class="mono">43</td><td>Menu text, including item names and rumor titles (message 4130 + rumor)</td></tr>
+    <tr><td class="mono">771</td><td>Rumor bodies (message <i>n</i> = rumor <i>n</i>)</td></tr>
+  </table></div>
+  <h3>TEST.EVT records</h3>
+  <p>Each 0x2800-byte record starts with a u32 offset to its text. The script runs from +4 up to that offset, and the text follows. A record whose text pointer isn't between 8 and 0x2800 is a placeholder.</p>
+  <ul>
+    <li><b>Scripts</b> use IC's classic opcode lengths. IC's exe has the table at file offset 0x67FF00, one byte per opcode.</li>
+    <li><b>Text</b> is PSX-encoded and not compressed, messages separated by 0xFE, with 0x95 as the space (PSX uses 0xFA). A battle's events each carry the whole battle's text block, so message numbers are shared across them.</li>
+  </ul>
+  <h3>BOOT.BIN tables</h3>
+  <p>BOOT.BIN is ELF offset + 0x8803FAC in PSP virtual addresses. Offsets below are file offsets in BOOT.BIN.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Offset</th><th>Table</th><th>Layout</th></tr>
+    <tr><td class="mono">0x2EE184</td><td>Event setup records</td><td>712 × 0x18 bytes, same layout as IC's. IC's 512–599 are byte-identical.</td></tr>
+    <tr><td class="mono">0x2F2494</td><td>Battle-event rules</td><td>u16 offset per rules key to a 0-terminated list of block offsets, all relative to 0x2F2494. A block is u16 op + u16 args.</td></tr>
+    <tr><td class="mono">0x31E698</td><td>World-map triggers</td><td>u16 offset per location (44, IC's town keys) to a 0-terminated list of block offsets, relative to 0x31E698. Blocks from 0x31E8E2: u16 op + args, conditions first, one action last.</td></tr>
+    <tr><td class="mono">0x31F85C</td><td>Rumor town masks</td><td>u32 per rumor, the same table as IC's</td></tr>
+  </table></div>
+  <p>Trigger ops and their argument counts: <code>01</code> var == (var, value), <code>02</code> var ≥, <code>03</code> var ≤, <code>04</code> in party (character), <code>0E</code> gil ≥ (1), <code>10</code>/<code>11</code> date ≥ / ≤ (month, day), <code>19</code> play event (event, mode), <code>1A</code> (8 args). Actions end a block: 00, 19, 1A, 1D, 20–24, 2A. Others: 1E (3 args), 1F/20/21/29 (2), 22/23/24/2A/2B (1).</p>
+</section>
+
+<section id="events">
+  <h2>How IC runs an event</h2>
+  <h3>Event setup records</h3>
+  <p>The exe holds one 0x18-byte record per event (file offset 0x8EAE98, 713 used of 887 slots). Signature: <code>48 8D 1D ?? ?? ?? ?? 41 8B D4 BD 27 00 00 00</code>. The LEA points at event 1's record, and an all-zero record ends the table. Look records up by their own id, not by position.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Offset</th><th>Field</th></tr>
+    <tr><td class="mono">+0x00</td><td>u16 event id</td></tr>
+    <tr><td class="mono">+0x02</td><td>Map (byte)</td></tr>
+    <tr><td class="mono">+0x03</td><td>Weather nibbles (high → var 0x30, low → var 0x23)</td></tr>
+    <tr><td class="mono">+0x04</td><td>Time of day (1 = night) → var 0x24</td></tr>
+    <tr><td class="mono">+0x07</td><td>u16 ENTD (the cast)</td></tr>
+    <tr><td class="mono">+0x0D/+0x0E</td><td>Preloaded for the next event</td></tr>
+    <tr><td class="mono">+0x12/+0x13</td><td>u16 next event</td></tr>
+    <tr><td class="mono">+0x14</td><td>Flags: <code>0x80</code> back to the world map, then the next event; <code>0x81</code> play the next event now; <code>0x82</code> game over</td></tr>
+    <tr><td class="mono">+0x16</td><td>Battle-event rules key (EnhancedBattleEvent); nonzero on stubs and battles</td></tr>
+  </table></div>
+  <p>The setup function is RVA 0x2FB7C8, and var 0x27 holds the id of the event being played.</p>
+
+  <h3>Stubs</h3>
+  <p>Every vanilla world trigger starts a <b>stub</b>: an empty event (<code>event000.e</code>) with a rules key. The stub shows the confirm prompt or sortie screen. Its rules' first block, <code>var 509 == 1 → play N+1</code>, starts the real scene. The mod's first attempt triggered a scene directly, without a stub, and crashed on load, so every port uses the pattern.</p>
+
+  <h3>EventId (nxd)</h3>
+  <p>One row per event. The simplest approach is to copy the vanilla row that plays the same role.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Role</th><th>Copy vanilla</th><th>What differs</th></tr>
+    <tr><td>Scene stub</td><td class="mono">464</td><td><code>SortieConfirmUnionId '7:139'</code>, a non-battle row with no prompt</td></tr>
+    <tr><td>Story-battle stub</td><td class="mono">33</td><td><code>'7:&lt;SortieConfirm row&gt;'</code>, the pre-battle panel</td></tr>
+    <tr><td>Continuous-battle stub</td><td class="mono">191, 196, 395…</td><td><code>'289:&lt;ContinuousSortieConfirm row&gt;'</code>, the minimap screen</td></tr>
+    <tr><td>Scene</td><td class="mono">465</td><td><code>Unknown4</code> = its own id</td></tr>
+    <tr><td>Battle start</td><td class="mono">34</td><td><code>Unknown4</code> = itself, <code>SeadStateParameterId 2</code></td></tr>
+    <tr><td>In-battle event</td><td class="mono">35</td><td><code>Unknown4</code> = the battle's first event; <code>Unknown2B = 1</code> on turn talk</td></tr>
+    <tr><td>Game over</td><td class="mono">135</td><td><code>Unknown4</code> = the battle's first event</td></tr>
+  </table></div>
+
+  <h3>Battle-event rules (EnhancedBattleEvent)</h3>
+  <p>Triple-keyed: Key = rules key, Key2 = block, Key3 = step. Blocks are tried in order. The first whose conditions all hold plays its event, and the battle keeps checking them as it runs. WotL's ops map one to one onto IC's rows (checked on vanilla key 41).</p>
+  <div class="table-wrap"><table>
+    <tr><th>UnkType4</th><th>Row fields</th><th>Meaning, as used</th></tr>
+    <tr><td class="mono">1</td><td>UnknownC var, Unknown14 [value]</td><td>var == value</td></tr>
+    <tr><td class="mono">4</td><td>CharaControlId</td><td>Select a unit for the next test</td></tr>
+    <tr><td class="mono">5</td><td>CharaControlId, [1]</td><td>The unit is present and able</td></tr>
+    <tr><td class="mono">6</td><td>CharaControlId, [0]</td><td>The unit is down (a defeat or victory condition)</td></tr>
+    <tr><td class="mono">8</td><td>CharaControlId, [20]</td><td>The unit's HP is at or below 20%</td></tr>
+    <tr><td class="mono">11</td><td>CharaControlId</td><td>It is that unit's turn</td></tr>
+    <tr><td class="mono">22</td><td>–</td><td>All enemies defeated</td></tr>
+    <tr><td class="mono">25</td><td>Unknown10 event</td><td>Play that event (ends the block)</td></tr>
+  </table></div>
+  <p>Battles use scratch vars 0x7D–0x81 so each turn talk plays once (the talk event sets its var).</p>
+  <div class="callout">A rule that names a unit goes through the <b>CharaControlId</b> table (nxd 0xDA): Key = the id used in the rule, <code>Unknown8</code> = the actual unit id. Vanilla covers 0–52, 100–103, 128–139, 256, 500–509 and 1000–1006. A WotL-only unit (Balthier 0xA2) needs a row such as 162 → 162, or battle setup dereferences null at RVA 0x2FC2E3.</div>
+
+  <h3>World-map triggers (EnhancedWorldEvent)</h3>
+  <p>Key = location (0–14 are the towns), Key2 = block, Key3 = step. Blocks are tried in Key2 order, and the first whose conditions all pass fires. Append new blocks after the location's highest Key2.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Type</th><th>Unknown8 (list)</th><th>Unknown10</th><th>Meaning</th></tr>
+    <tr><td class="mono">1</td><td>[value]</td><td>var</td><td>var == value</td></tr>
+    <tr><td class="mono">2</td><td>[var, value]</td><td>0</td><td>var ≥ value (u16; gil 50,000 is written as −15536)</td></tr>
+    <tr><td class="mono">3</td><td>[var, value]</td><td>0</td><td>var ≤ value</td></tr>
+    <tr><td class="mono">4</td><td>[character id]</td><td>0</td><td>That character is on the roster</td></tr>
+    <tr><td class="mono">25</td><td>[event, mode]</td><td>0</td><td>Play the event (use WotL's mode)</td></tr>
+  </table></div>
+  <p>Set <code>Unknown14</code> and <code>Unknown18</code> to 47 as the vanilla rows do. The evaluator is at RVA 0x343AF8. It rebuilds WotL's u16 bytecode from each block and runs handlers from the table at 0x684E90. WotL's date ops 0x10/0x11 aren't in IC's rows, so compare the calendar vars instead: var 0x2E is the month, 0x2F the day.</p>
+
+  <h3>Variables</h3>
+  <p>The event variable function is 0x2EC298. Vars 0–0x7F are u32, 0x80–0x35F are single bits (stored from block +0x200) and 0x360–0x3FF are 4-bit. Other useful ones:</p>
+  <ul>
+    <li><code>0x2C</code> gil; <code>0x2E</code>/<code>0x2F</code> month and day.</li>
+    <li><code>0x6E</code> story progress (WotL's trigger windows use exact values of it); <code>0x6F</code> chapter milestone (13 at chapter 4's start, 16 later).</li>
+    <li><code>0x27</code> the current event.</li>
+    <li><code>0x55</code> WotL's "next story event"; IC doesn't use it for hand-offs.</li>
+  </ul>
+  <p>GetVar is 0x2332D8, SetVar 0x233368 and the script's variable-op dispatcher 0x242700.</p>
+</section>
+
+<section id="port">
+  <h2>Porting a WotL event</h2>
+  <p>IC already has the setup records for 512–599 (map, cast, rules key, chaining) and the casts for 512–533. A port adds the rest:</p>
+  <ol class="steps">
+    <li><b>Scripts.</b> Convert each event's script (<a href="#convert">next section</a>) to <code>script/enhanced/eventNNN.e</code>. Stubs get a copy of vanilla <code>event000.e</code>.</li>
+    <li><b>Text.</b> Give every page a global text id and write the scene's scenario file (below).</li>
+    <li><b>EventId rows</b> copied by role (table above).</li>
+    <li><b>Rules rows</b> from WotL's rules table, same keys (146–164).</li>
+    <li><b>A trigger</b> from WotL's trigger table, unless the scene is started by another event's record.</li>
+    <li><b>Cast support rows</b>: CharaControlId for units the rules name, EntryNo for the ENTD, CharShape for every sprite set the cast uses.</li>
+    <li><b>Pre-battle screen</b>: a SortieConfirm row, or a continuous-battle row for a chain battle.</li>
+    <li><b>Title, objective, speakers</b>, and any missing sprite-sheet textures.</li>
+  </ol>
+
+  <h3>Text files</h3>
+  <p>An event's lines live in <code>nxd/text/scenario/scenario&lt;key&gt;.en.pzd</code>, where <i>key</i> is the <b>ScenarioId</b> row whose <code>EventIds</code> list includes the event. That row's <code>UnknownC</code> is a <b>ScionFiles</b> key whose <code>File</code> is <code>nxd/text/scenario/scenario%04d.pzd</code> (the language is inserted). Text ids are global and unique: vanilla uses 300000–357600, and this mod uses 381590 and up, 100 per scene group.</p>
+  <p>Write the lines as YAML and convert with <code>FF16Tools.CLI pzd-conv -i scenarioNNNN.en.yaml</code>:</p>
+  <pre><code>- Id: 382000
+  Line: 'You''ve a fine eye for a pirate.'
+  Speaker:
+    Type: 24
+    Value: 1162000
+  VoiceSoundPath: ''
+  ShowType: Normal
+  ShortVoiceSoundPath: ''
+  IsShortened: false</code></pre>
+  <p><b>Speaker</b> values are rows of <code>Speaker-en</code> (code → name plate), for example 1010103 Ramza, 1030100 Agrias, 1020101/1020102 Delita. New names get new rows: the mod adds Balthier 1162000, Luso 1163000, Assassin, Northern Sky Scout, Mysterious Voice, Delita's Voice, Aliste, Celebrant Bremondt, Ninja and Northern Sky Deserter. A line with no speaker row is allowed. A line can also override the name inline with <code>&lt;speaker="Name"&gt;</code>.</p>
+
+  <h3>Casts</h3>
+  <ul>
+    <li><b>ENTD ids ≥ 512</b> come from fftpack <code>event_btlevt_bin_entrydata_add_ent.bin</code> (entry = id − 512, 0x280 bytes). The loader (0x284098) allocates room for 80 entries, so ids 512–591 are addressable. IC's file already has WotL's casts 512–533. Units can be redefined without replacing the file through <b>OverrideEntryData</b> (Key = ENTD, Key2 = slot).</li>
+    <li><b>EntryNo</b> (base row id) needs a row for every ENTD. The row picks formation or none: story battles with a formation use <code>UnknownC [0, N, 0]</code> (N rises through the story, 5,700–8,300 for these battles) and <code>Unknown14 [130,145,130]</code>. Scenes and preset-unit battles use <code>[]</code>. A missing row crashed battle setup (0xFB6C8).</li>
+    <li><b>CharShape</b> (base row id, keyed by sprite set) needs a row for every sprite set on screen. Vanilla stops at 0x9E. A missing row is a null read at 0x217172. For a humanoid sprite, copy row 0x83.</li>
+    <li>A unit can be player-controlled without a formation (Delita at Yardrow and Zeirchele): that is a flag in its ENTD entry, not EntryNo.</li>
+  </ul>
+
+  <h3>Pre-battle screen</h3>
+  <p>A story-battle stub points at a <b>SortieConfirm</b> row (union <code>7:&lt;row&gt;</code>), copied from a vanilla battle on the same map; <code>MapId</code> is the panel's map. The panel only shows if <code>Unknown2C != 0</code>. Every vanilla story battle has 0 and starts on arrival, as WotL did. Chain battles use <b>ContinuousSortieConfirm</b> instead (<a href="#minimap">minimap</a>).</p>
+
+  <h3>Location titles</h3>
+  <p>WotL scripts show titles with ShowMapTitle (0x91), which IC removed from every script; it only gives a silent black screen. IC's own opcode is <code>E7 &lt;u32 Caption id&gt;</code>. It takes a <b>Caption</b> row, not a PlaceName: Caption rows point at a PlaceName through <code>UnionId '113:&lt;PlaceName&gt;'</code>, for example 1200 → 12000 "Zeltennia Castle Keep". Place E7 right before the scene's first Reveal (0x4D); at the very start of the script it shows nothing. New titles need new Caption rows (the mod adds 1310 → Lenalian Plateau, 1320 → Zeirchele Falls).</p>
+  <p>Battles take their title and save-file name from the <b>Map</b> row instead: <code>Unknown8</code> = title PlaceName, <code>UnknownC</code> = region, <code>Unknown10</code> = spot. The save entry is region + spot.</p>
+
+  <h3>Objectives</h3>
+  <p>DisplayConditions (0x78) takes 8 + a <b>BattleObjective</b> row. Rows 35–68 are WotL's and have no names in IC because WotL drew objectives as images. Name the ones you use in <code>BattleObjective-en</code> (for example 37 "Defeat Argath!", 40 "Protect Luso!").</p>
+</section>
+
+<section id="convert">
+  <h2>Converting a WotL script</h2>
+  <p>WotL scripts already use IC's classic opcode set. Enhanced-mode scripts differ in only three lengths, and IC's own opcodes occupy ranges WotL doesn't use:</p>
+  <div class="table-wrap"><table>
+    <tr><th>Opcode</th><th>Classic / WotL</th><th>Enhanced</th><th>Change</th></tr>
+    <tr><td class="mono">10 DisplayMessage</td><td>14 bytes</td><td>17 bytes</td><td><code>10 const type &lt;u32 text id&gt; &lt;u16 unit&gt; &lt;7 bytes as WotL&gt; &lt;last byte widened to u16&gt;</code></td></tr>
+    <tr><td class="mono">51 ChangeDialog</td><td>5</td><td>7</td><td><code>51 box &lt;u32 text id, FFFFFFFF = close&gt; &lt;2 bytes&gt;</code></td></tr>
+    <tr><td class="mono">EB</td><td>6</td><td>10</td><td>IC's own paging op (not in WotL scripts)</td></tr>
+  </table></div>
+  <p>IC defines its own meanings for A6–AF, C2–CE and E7–EE. Stop if a WotL script uses one of those. Check every converted script by walking it with the enhanced length table to the EventEnd (0xDB); all 560 vanilla enhanced scripts parse that way.</p>
+
+  <h3>Text decoding</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Bytes</th><th>Character</th><th>Bytes</th><th>Character</th></tr>
+    <tr><td class="mono">00–09</td><td>0–9</td><td class="mono">0A–23</td><td>A–Z</td></tr>
+    <tr><td class="mono">24–3D</td><td>a–z</td><td class="mono">95 (or FA)</td><td>space</td></tr>
+    <tr><td class="mono">3E / 40 / 46 / 5F</td><td>! ? : .</td><td class="mono">93 / 91</td><td>' "</td></tr>
+    <tr><td class="mono">8D / 8E</td><td>( )</td><td class="mono">F8</td><td>line break</td></tr>
+    <tr><td class="mono">E0</td><td>Ramza's name</td><td class="mono">E3 08 … E3 00</td><td>speaker tag (drop it; IC names speakers separately)</td></tr>
+    <tr><td class="mono">D9 B6 / C1 / C9 / BE</td><td>. ' ? :</td><td class="mono">D1 1A / 1D / 1C / 29</td><td>! - ~ *</td></tr>
+    <tr><td class="mono">DA 74 / 75 / 68</td><td>, ; —</td><td class="mono">FE</td><td>end of message</td></tr>
+  </table></div>
+  <p>WotL stresses a word with hyphens (<i>-is-</i>). IC uses <code>&lt;i&gt;is&lt;/i&gt;</code>.</p>
+
+  <h3>Pages and boxes</h3>
+  <ul>
+    <li><b>One page per text id.</b> WotL separates pages with blank lines inside one message. IC gives each page its own id and advances with <code>E5 01 00</code> (wait) + <code>51 box &lt;next id&gt; 00 00</code>. Join each page's own line breaks with spaces.</li>
+    <li><b>Keep pages to about 150 characters.</b> IC's box shows three lines; 99% of IC's lines are 146 characters or less. Split longer pages at sentence ends.</li>
+    <li><b>The box style is the high nibble of the type byte</b> and the box slot the low nibble. A style IC never uses (ReMixed's 6) indexes box slot −1 and crashes (0x136541).</li>
+    <li><b>Speech bubbles (1x) never page in IC.</b> A multi-page bubble becomes the portrait box of the same slot (<code>9x</code>), paged as above and closed after its last wait with <code>51 box FFFFFFFF 00 00</code>.</li>
+    <li><b>In-battle speech (0x70) with several pages</b> becomes IC's 0xF0 box: <code>E5 01</code>, <code>EB &lt;this&gt; &lt;next&gt; 00 00</code> per page, and <code>EB &lt;last&gt; FFFFFFFF 00 00</code> after the last wait.</li>
+    <li>A reward or system line with no speaker: type 0x12 on unit 0xFD (no unit), then close box 2.</li>
+  </ul>
+
+  <h3>Other changes</h3>
+  <ul>
+    <li><b>Recruitment.</b> WotL shows the join window (<code>78 07 3C</code>, <code>E5 38 00</code>) under a dark screen. Every IC recruitment (170, 213, 298, 374) shows it after the final fade instead: <code>3E …</code>, <code>E5 0C 00</code>, <code>F1 3C 00</code>, <code>78 07 3C</code>, <code>E5 38 00</code>. Move it the same way. The scenes contain the party check 0xA2.</li>
+    <li><b>Story hand-offs.</b> WotL ends hand-off events with a write to var 0x55 (the next event) and <code>CallFunction 06</code>. IC never uses either, so drop both, and use the setup record's next event instead (<a href="#story">story links</a>). ADD accumulates, so "set 0x55 to 200, then add 195" means 395.</li>
+    <li><b>ShowMapTitle</b> → <code>E7 &lt;Caption&gt;</code> before the first Reveal (above).</li>
+    <li><b>Maps IC lacks HD data for</b>: rewrite ChangeMap (0x4C) targets and any WarpUnit (0x5F) / WalkTo (0x28) tiles off the stand-in map. The scene's first map is the setup record's +2, patched in memory.</li>
+    <li><b>Scenes only a chain ever reached</b> may never set their own "seen" flag. When a port also triggers them from the map, append <code>BE var</code> + <code>B0 var 1</code> before the EventEnd.</li>
+    <li>Vars that WotL's rumors use are renumbered when the rumor ids shift (<a href="#rumors">rumors</a>).</li>
+  </ul>
+</section>
+
+<section id="art">
+  <h2>Event art and sprites</h2>
+  <h3>Event sprite sheets</h3>
+  <p>Scripts load special pose sheets with LoadEVTCHR (0x58). In enhanced mode each sheet is drawn from a texture <code>system/ffto/g2d/tex_NNNN.bin</code>: raw 512 × 512, 4 bits per pixel. The exe maps sheet → texture number with a u32 table of 143 entries at file offset 0x7136B4 − 0x89 × 4. Two problems:</p>
+  <ul>
+    <li><b>WotL-only sheets 0x89–0x8E</b> (textures 1279–1284) ship in IC as copies of sheet 0x36, so poses draw as scrambled pieces. The mod ships real ones.</li>
+    <li><b>Vanilla sheets WotL drew extra frames on.</b> IC's textures stop at row 442 of 512, and WotL put new poses below that (Ovelia's grass whistle on 0x1E, her prayer on 0x7C and others). The mod ships IC's own rows 0–441 with only rows 442–511 added, so vanilla scenes keep IC's art.</li>
+  </ul>
+  <p>IC's own textures are in <code>g2d.dat</code>: a u32 index offset at +8, a u16 count at +12, then 16-byte entries (u32 offset, u24 size). An entry's data is zlib-compressed from +16 when its +4 is 2.</p>
+  <p>The replacement pixels are from Spikedrose's "FF Tactics Mobile Sprites" (used with permission). That set redraws whole sheets with the same layout and palette.</p>
+  <h3>Props and shapes</h3>
+  <p>Agrias's Birthday's gift box is a unit with sprite set 0xA9 (<code>unit_psp/spr_dst_bchr_sword_m_spr.bin</code>, a PSP prop sheet IC ships). It only needed a CharShape row. The sprite type table (file offset 0x672300, 4 bytes per sprite set: SHP, SEQ, flying, height) says which frame layout a sprite set uses; type 0 is humanoid.</p>
+</section>
+
+<section id="chars">
+  <h2>Characters, jobs and portraits</h2>
+  <h3>Table rows</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Table</th><th>Rows</th></tr>
+    <tr><td>CharaName-en</td><td>162 Balthier, 163 Luso (730 also fixed to "Helvynya")</td></tr>
+    <tr><td>Job-en</td><td>162 Sky Pirate, 163 Game Hunter, 165 Deathknight, 166 Templar, 167 Celebrant, 168 Dark Dragon. Each has a name, a description, its job type and a command set. The Dark Dragon hides its job tree.</td></tr>
+    <tr><td>JobCommand-en</td><td>225 Piracy, 226 Huntcraft (the other jobs reuse vanilla commands 39/69/42/44)</td></tr>
+    <tr><td>Ability-en</td><td>358–366: Barrage and the Plunder set</td></tr>
+    <tr><td>UIJobAbilityHelp-en</td><td>39/40, the job overview pages (rows 35–38 filled blank to keep the table contiguous)</td></tr>
+    <tr><td>CharShape</td><td>159–169, one per WotL sprite set, plus the gift box</td></tr>
+  </table></div>
+  <p><code>tables/enhanced/JobData.xml</code> lists only the fields it changes, so other mods can edit the same jobs. It gives the human jobs IC's extra equipment types (hair adornments, perfume) and sets <code>MonsterPortrait</code> on jobs 165–168.</p>
+
+  <h3>Portraits</h3>
+  <p>A portrait goes: <b>portrait table</b> (index → face id) → <b>face map</b> (face id → wldface number) → texture <code>ui/ffto/common/face/texture/wldface_NNN_08_uitx.tex</code> (+ its <code>textureparts</code>).</p>
+  <ul>
+    <li>Balthier (0xA2) and Luso (0xA3) are hard-coded by sprite set to faces 0x6C/0x6D → wldface 163/164. They only need the textures.</li>
+    <li>Sprite sets 0x82 and above take portrait table[<code>MonsterPortrait</code> of their job]. The mod points table entries 165–168 at face ids 0x63, 0x6F, 0x6E and 0x64, and face ids 0x63/0x64 at wldface 165/168 (0x6E/0x6F already map to 167/166).</li>
+    <li>There are six identical portrait tables, one per screen. Signature: <code>00 00 00 00 01 00 02 00 03 00 78 00 79 00 04 00 7A 00 7B 00 7C 00 7D 00 05 00 06 00 7E</code>; find all six. The face map comes from the LEA in <code>48 8D 0D ?? ?? ?? ?? 8B 04 81 C3 B8 C2 00 00 00</code>.</li>
+    <li><b>Crash guard.</b> For face ids ≥ 0x3F the portrait code reads a global "last monster job data" pointer without a null check. It crashes if no monster portrait has been drawn yet. The mod seeds it with Ramza's chapter 1 job entry. The global is the store in <code>48 89 0D ?? ?? ?? ?? 0F B6 49 2E 41 80 F8 5B</code>.</li>
+  </ul>
+  <p>The separate guide <a href="https://claude.ai/artifact/BhV6jp15pUUQk235kqdbhD">Custom Unit Portraits in FFT: The Ivalice Chronicles</a> covers portraits in more depth.</p>
+</section>
+
+<section id="rumors">
+  <h2>Tavern rumors</h2>
+  <p>Four WotL rumors gate quests: Rash of Thefts → A Call for Guards (Balthier), Disorder in the Order (the Deserters) and Lionel's New Liege Lord (Beowulf and Reis). IC dropped them.</p>
+  <ul>
+    <li><b>Rows.</b> <code>Gossip-en</code> is base-row-id. IC's 0–21 are WotL's 0–21 and IC's 22 is its own "At Battle's End", so WotL rumors 22–25 become IC 23–26. The unlock vars WotL's scripts set (0x2E7–0x2EA, "var 0x2D1 + id") shift by one to match, in every converted script.</li>
+    <li><b>Where they're listed.</b> A u32 town mask per rumor (bit 0x4000 >> town) at RVA 0x7BE620, found by <code>B8 00 40 00 00 4C 8D 05 ?? ?? ?? ?? 8B CE D3 E8 41 85 04 B8</code>. IC's entries past its own rumors are 0. The mod writes WotL's masks: Rash 0x4140, Call 0x0020, Disorder 0x1100, Lionel 0x056A. Availability (0x36F53C) also needs the unlock var set.</li>
+    <li><b>What reading does</b> (0x19D548). If <code>Unknown4</code> (a quest counter) is nonzero and that counter is below <code>Unknown8</code>, the counter is raised to <code>Unknown8</code> and the <code>Unknown14</code>/<code>Unknown1C</code> action pairs run. Type 102 sets base = value × 10, anything else does SetVar(type + base, value).</li>
+    <li><b>Counters.</b> IC's scripts use counters 0–3. The array is 12 dwords, followed by a byte flag bank, so the mod uses counters 4–6. An earlier version used 12 and overwrote the flag bytes.</li>
+    <li><b>The picture.</b> The rumor screen shows a town picture only when <code>Unknown4 &gt; 0</code> and <code>Unknown8 &gt; 0</code>, from <code>IconId</code> (Icon row 21, <code>base_%02d_uitx</code>).</li>
+    <li><b>WotL's actions</b> are embedded at the start of each rumor body in fftpack 771 as <code>F5 type F6 value</code>. Rash of Thefts sets 0x2FA and unlocks A Call for Guards, A Call for Guards sets 0x2FB, Disorder sets 0x2FC and Lionel's sets 0x2FD.</li>
+  </ul>
+</section>
+
+<section id="story">
+  <h2>Putting scenes back into the story</h2>
+  <p>Three WotL scenes had no world trigger because WotL played them in the middle of IC's own story chains. WotL chained them with var 0x55 + <code>CallFunction 06</code>, which IC dropped. IC chains through the setup record's next event instead, so the mod rewrites records in memory. Each patch names the record's expected old byte and is skipped with a warning if it differs.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Scene</th><th>IC's chain</th><th>Restored</th><th>Record bytes</th></tr>
+    <tr><td>Zeirchele Falls</td><td>195 → world map → 196</td><td>195 → 512 at once; 515 → world map → 196</td><td class="mono">195 +12 C4→00, +13 00→02, +14 80→81; 515 +12 00→C4</td></tr>
+    <tr><td>Argath (Inner Court)</td><td>394 → 395</td><td>394 → 537; 542 → 395</td><td class="mono">394 +12 8B→19, +13 01→02; 542 +12 00→8B, +13 00→01</td></tr>
+    <tr><td>Beowulf and Reis</td><td>(WotL only)</td><td>560 → 561</td><td class="mono">560 +12 00→31, +13 00→02</td></tr>
+  </table></div>
+  <div class="callout">Once a scene's last event hands off into IC's story, it can't also have a world trigger for saves already past that point: the hand-off would replay IC battles those saves have played. The mod has no fallback triggers for these scenes. WotL had none either.</div>
+  <p>Event 536 (Delita and Ovelia at Bervenia) is also patched: its record's map byte goes from 126 to 20, a stand-in (<a href="#maps">maps</a>).</p>
+</section>
+
+<section id="maps">
+  <h2>Maps</h2>
+  <p>A map has two halves in IC. The <b>classic half</b> (GNS, textures and terrain in fftpack) drives movement, heights and events. The <b>HD half</b> (<code>bg/meshes/map_NNN_mesh.bin</code>, <code>bg/textures/NNN/</code>, the RefinedBg* tables) is what enhanced mode draws. HD meshes stop at map 116, and WotL's maps 125–127 have no HD half.</p>
+  <h3>Stand-ins</h3>
+  <p>Bervenia's scene (536) used WotL's map 126. It plays on map 20 (Zeltennia Castle Keep), then map 2 (Lesalia Castle Postern) after its ChangeMap. Both maps were checked to hold every WotL position.</p>
+  <h3>Copying map 127</h3>
+  <p>WotL's map 127 (Limberry Castle Inner Court) is Fort Besselat – South Wall (map 66) under another name, and IC already knows it. Its per-map file lists (exe 0x685450 and 0x685050, one per mode) give map 127 exactly map 66's classic files. Only the HD half was missing. The copy:</p>
+  <ol class="steps">
+    <li>Copy <code>bg/meshes/map_066_mesh.bin</code> to <code>map_127_mesh.bin</code> and change the u32 map id at +8 from 66 to 127.</li>
+    <li>Copy the folder <code>bg/textures/066/</code> to <code>bg/textures/127/</code>. The loader builds <code>bg/textures/%03d/%s.tga</code> from the map id.</li>
+    <li>Copy map 66's rows in RefinedBgAnim, RefinedBgMeshNode, RefinedBgMeshPolygon, RefinedBgMeshPolygonCond, RefinedBgSystemTexture and RefinedBgTexture to key 127.</li>
+    <li>Give Map row 127 map 66's settings and its own names: title 11850 "Limberry Castle Inner Court", region 1050 "Limberry Castle", spot 33250 "Inner Court". Add the new PlaceName rows in all four languages; PlaceName is sparse-keyed.</li>
+  </ol>
+  <p>Patching the Map row in memory instead (an earlier version) worked but froze loading while it searched memory for the row.</p>
+  <h3>Battle surfaces</h3>
+  <p>Maps IC only uses for cutscenes have no battle surface: no grid, and a cursor stuck at one height. The chapel ruins (map 45), where Ovelia's Yardrow battle is fought, needed one generated. That work has its own guide: <a href="https://claude.ai/artifact/Ap4iZtaZd6dhRKrGDUWkvK">IC Battle Grid Guide</a>.</p>
+</section>
+
+<section id="minimap">
+  <h2>The multi-stage battle minimap</h2>
+  <p>IC shows a minimap before each battle of a chain (Limberry, Lionel, Orbonne and so on): the path, a marker per battle, and the party walking to the next one. It is data in two places.</p>
+  <h3>ContinuousSortieConfirm rows (nxd 289)</h3>
+  <p>A chain stub's EventId union is <code>'289:&lt;row&gt;'</code>. The row is "the confirm before battle N". Its list fields hold keys of <b>ContinuousBattleTimeline</b>, which names UI timelines: 1–9 MapA…MapH, 10–13 PointStart…Point03, 18–22 PositionStart…Position04, 25–28 Move01…04, 33–36 StayStart…Stay03, 39–42 Point01…04 as nodes.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Field</th><th>Stage N row</th><th>Example: Limberry stage 3</th></tr>
+    <tr><td class="mono">Unknown8</td><td>[Point N−1] (blinks the next marker)</td><td class="mono">[12]</td></tr>
+    <tr><td class="mono">Unknown10 / Unknown18</td><td>[Position N−1] / [Position N]</td><td class="mono">[20] / [21]</td></tr>
+    <tr><td class="mono">Unknown20</td><td>[Move N] (walk N−1 → N)</td><td class="mono">[27]</td></tr>
+    <tr><td class="mono">Unknown30 / 34 / 38</td><td>Region, spot, [spot] (the header names)</td><td class="mono">1050, 33250, [33250]</td></tr>
+    <tr><td class="mono">Unknown40 / Unknown50</td><td>The map component (ContinuousBattleTimeline key)</td><td class="mono">6 (MapE)</td></tr>
+    <tr><td class="mono">Unknown44</td><td>Stay N−1</td><td class="mono">35</td></tr>
+    <tr><td class="mono">Unknown48</td><td>[the Point N node]</td><td class="mono">[41]</td></tr>
+    <tr><td class="mono">Unknown5C</td><td>Stage 1 only: header text (UI-en, e.g. 3919 "Battle at Limberry Castle")</td><td class="mono">0</td></tr>
+    <tr><td class="mono">Unknown68</td><td>Stage number</td><td class="mono">3</td></tr>
+  </table></div>
+  <p>Two chains can share a map component, each with its own rows, as Beowulf and Reis now share IC's Lionel map (rows 1 and 2). Every marker the component draws appears in both chains.</p>
+
+  <h3>The layout file</h3>
+  <p><code>ui/ffto/battle/ffto_battle_continuous_map.uib</code> holds 30 components. MapA…MapH are 900 × 540 layers over one 362 × 222 panel of the art sheet <code>ui_battle_continuous_map_dotart_uitx</code> (3 × 3 panels, all used). MapAll shows them and selects the panel. A component's stage count is fixed by its nodes and timelines; Limberry had 3 and MapH 4.</p>
+  <p>The format is FF16's UIBinary. Every offset is relative to the start of the structure that holds it, not to the field.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Structure</th><th>Fields</th></tr>
+    <tr><td>Header</td><td>"UIB\0", u32 version 10, +0x18 TOC offset (0x2C)</td></tr>
+    <tr><td>TOC</td><td>+0 asset list, +4 component table, +8 count</td></tr>
+    <tr><td>Component, 0x40</td><td>+0 name, +4/+8 width/height, +0xC properties, +0x10 node list, +0x14 count, +0x18 timelines, +0x1C count</td></tr>
+    <tr><td>Node list</td><td>u32 offsets (relative to the list) to nodes</td></tr>
+    <tr><td>Node</td><td>+0 type (1 layer, 2 image, 3 text, 4 nine-grid, 10 reference to another component, 13 mask), +4 name, +8/+0xC origin, +0x10 rotation (radians), +0x14/+0x18 scale, +0x1C anchor, +0x44/+0x48 size, +0x4C data; layers: children +0x90 / count +0x94; references: component name +0x70</td></tr>
+    <tr><td>Timeline, 0x60</td><td>+0 name, +4 flags, info at +8: +4/+8 elements, +0xC/+0x10 asset groups, +0x14/+0x18 targets, +0x1C frames</td></tr>
+    <tr><td>Element, 0x20</td><td>+4 name, +0xC first frame, +0x10 frame count, +0x14 target index, +0x1C keyframe data. Data +0: 5002 = int x, y at +0x74/+0x78 (a position); 5028 = a sub-animation name at +0x30 (Show, Next…)</td></tr>
+  </table></div>
+  <h3>Layout rules, read from IC's maps</h3>
+  <ul>
+    <li>A point's node origin is its marker's top-left; the marker's centre is origin + (30, 15).</li>
+    <li>A line starts at the centre of the point it leaves. Its rotation is atan2(dy, dx) to the next centre, its y-scale is −1 when it heads left, and its width is the distance.</li>
+    <li>The unit stands at about point origin + (0, −91).</li>
+    <li>HomePosition places the points and lines. Point N blinks the next marker and line, Move N walks the unit (a 5002 key at frame 0 and one at frame 120), and Position N and Stay N put it at stage N. There is no Point timeline for the last stage.</li>
+  </ul>
+  <h3>Giving a map another stage</h3>
+  <ol class="steps">
+    <li>Copy a component that has enough stages (MapH) to the end of the file. Re-aim every offset that points outside the copied block (the shared string pool, asset data) by the distance it moved. Offsets inside the block move with it.</li>
+    <li>Point the target component's record (+0xC, +0x10, +0x18 and the counts) at the copy. Its name and the MapAll reference stay as they are.</li>
+    <li>Rewrite the copy's coordinates: node origins, line origin/rotation/scale/width, the HomePosition 5002 keys (matched by target name), and the unit's 5002 keys in every Point, Move, Position and Stay timeline.</li>
+    <li>Change or add the ContinuousSortieConfirm rows and point the stubs' EventId unions at them.</li>
+  </ol>
+  <p>A whole new component would also need the component table moved (it is a fixed 30-entry array, but only the TOC points at it), a MapAll reference node and timeline, and a ContinuousBattleTimeline name row. Nobody has checked whether the exe accepts map keys above 9.</p>
+</section>
+
+<section id="items">
+  <h2>WotL's 40 items</h2>
+  <p>IC's item code is WotL's own: the same range table, data-type tables and getters. Its secondary tables only cover IC's five extra items (0x100–0x104), and its arrays and bounds are sized for 0x105 items. The mod keeps WotL's ids, since IC's code still special-cases them (the Onion gear is reserved for jobs 0xA1/0xA4 in the can-equip check). The exception is the five Fell Swords, whose ids IC took; they move to 0x116–0x11A. The full site list is in <code>research/ITEM_EXPANSION.md</code>.</p>
+  <h3>Where the data comes from</h3>
+  <p>In WotL's BOOT.BIN (virtual addresses): common records 0x8A5ADAC (12 bytes), weapons 0x8A5B07C (8), shields 0x8A5B17C (2), armor 0x8A5B184 (2), accessories 0x8A5B1A4 (2), equipment bonus rows 0x50–0x64 at 0x8A5B1B8 (0x19 bytes; IC's rows have a 26th byte, 0), and sprite pairs 0x8A5B3C8. Bonus rows move up by 5 (IC's own items use 0x50–0x54). Record byte 4 (the index in the item's vanilla sub-table) takes a similar vanilla item's value.</p>
+  <h3>What has to change in the exe</h3>
+  <ol class="steps">
+    <li><b>Hook the getters.</b> RVAs 0x2B8BCC–0x2B8EF0 are the only code that reads the item tables: the range index 0x2B8BCC (hard-codes ≤ 0xFD or 0x100–0x104), common record 0x2B8C44, sub-getters 0x2B8C74/CD4/D3C/DA0/E04, sprite pair 0x2B8E60 and is-valid 0x2B8EBC. Answer ids ≥ 0x105 from your own tables and let everything below run the game's code.</li>
+    <li><b>Move the per-item arrays</b> to a page allocated near the exe, and re-point all 63 instructions that address them. The arrays are the bag counts (0x11A7C00), the owned mirror (0x3C52740), the bonus table (0x80FEA0, 0x55 rows × 0x1A) and the equip picker's all-items chart (0x1874726).</li>
+    <li><b>Move the nine menu order charts</b> by rewriting the 14 pointer slots their readers use.</li>
+    <li><b>Widen the bounds that must see new ids</b>: bag access, menu lists, chart walks, the five <code>cmp …, 0x55</code> bonus-row checks, and the 16 "right hand ≥ 0x105" hand-slot checks. Leave alone, on purpose, the bounds of fixed buffers indexed by id (auto-sell, the 100-items check, the inventory reset, the "new in stock" array) and the steal/break code. There a new id reads as "no item", which is safe.</li>
+    <li><b>Save the new counts without changing the save format.</b> The event variable block (0x400 bytes) is saved whole by the serializer 0x218F78, load 0x21B0E8, and battle suspend/resume. No variable id reaches past +0x2FC, so the mod keeps a tag ("WC" 1 0) and one count per new id there. Mid-battle saves are covered, and a save loads without the mod; the new items then vanish.</li>
+    <li><b>Keep the charts' vanilla save fields valid</b> by projecting them back with vanilla ids only, both ways, on a short timer and when the serializer runs.</li>
+  </ol>
+  <p>Arm everything or nothing: check every byte first, and if any site differs, leave the expansion off.</p>
+  <h3>Data rows</h3>
+  <ul>
+    <li><code>Item-en/fr/de/ja</code> are base-row-id. Ship every row 261–315, blank ones included. A lone row 312 sat at position 261, and the item showed no name, icon or description.</li>
+    <li>Each item needs a <code>UiItemCategoryId</code> and a <code>SortOrder</code> that is unique within its category. The Fell Swords get a new UIItemCategory row 35.</li>
+    <li>Icons are one texture per item id: <code>ui/ffto/icon/equip_item/texture/ei_NNN_uitx.tex</code> (100 × 100) and <code>equip_item_s/…/ei_s_NNN_uitx.tex</code> (48 × 48, BC7), each with a <code>textureparts/*.utexpt</code> giving its path.</li>
+    <li>Effect text uses IC's wording. The weapon effect table (ItemOptionsData) starts at RVA 0x80FBA0.</li>
+  </ul>
+  <h3>Balthier's gear</h3>
+  <p>WotL doesn't put Ras Algethi and the Mirage Vest in his ENTD; ENTD item fields are one byte. The unit setup loop (IC 0x27176B) checks unit byte 0 == 0xA2 and var 0x27 == 518, then copies the 7-word table at 0x714460 (<code>0, 0x12F, 0, 0x107, 0, 0, 0</code>) over his equipment. IC still ships that code, so once the items exist he joins wearing them.</p>
+  <div class="callout">Only three items can be obtained in play: the Tynar Rouge (Agrias's Birthday) and Ras Algethi and the Mirage Vest (Balthier). WotL's other items came from its multiplayer modes. Shops stop at id 255, ENTD items are one byte, and steal/break isn't widened.</div>
+</section>
+
+<section id="birthday">
+  <h2>Agrias's Birthday reward</h2>
+  <p>WotL's scene 579 ends by setting var 0x2F9, then 0xB6. The mod hooks the variable-op dispatcher at its call from the event interpreter. An identical copy of the dispatcher exists at 0x2EC038, so hook the call site, not the function. On <code>ADD 0x2F9, 1</code> the hook gives one Tynar Rouge and multiplies Agrias's raw HP and MP (roster slot +0x20 and +0x23, 3 bytes each) by 1.1. It skips the reward if 0xB6 (seen) is already set, so a replay grants nothing.</p>
+  <p>The roster is 54 slots of 0x258 bytes, and the item counts sit 0x110 bytes before it. If the item expansion isn't armed, the reward falls back to a Septième Sens.</p>
+</section>
+
+<section id="catalog">
+  <h2>Scene catalog</h2>
+  <p>Triggers are WotL's own. Stubs are in brackets. Each group has its own scenario file, keyed 9512–9580 (the birthday uses 9159).</p>
+  <div class="table-wrap"><table>
+    <tr><th>Events</th><th>Scene</th><th>Map · cast</th><th>How it starts</th></tr>
+    <tr><td class="mono">[512] 513–515</td><td>Delita and Ovelia at Zeirchele Falls (battle)</td><td class="mono">83 · 512</td><td>After 195, the end of the Lionel Castle sequence</td></tr>
+    <tr><td class="mono">[516] 517</td><td>Wiegraf mourns Milleuda; Loffrey</td><td class="mono">77 · 513</td><td>Balias Swale, 0x6E == 29, 0x2EE == 0</td></tr>
+    <tr><td class="mono">[518] 519–522, [523] 524</td><td>Balthier: battle and recruitment</td><td class="mono">32 · 514/528</td><td>Dorter, 0x6F ≥ 13, 0x2F0 == 0, rumors read (0x2FA, 0x2FB)</td></tr>
+    <tr><td class="mono">[525] 526–528, [529] 530</td><td>Luso: rescue battle and recruitment</td><td class="mono">76 · 515/517</td><td>Zeklaus Desert, 0x6E == 37, 0x2EF == 0</td></tr>
+    <tr><td class="mono">[531] 532–534</td><td>Ovelia's prayer, the assassins (battle)</td><td class="mono">45 · 516</td><td>Yardrow, 0x6E == 39, 0x2F1 == 0</td></tr>
+    <tr><td class="mono">[535] 536</td><td>Delita and Ovelia, "Tietra"</td><td class="mono">126 → 20, 2 · 518</td><td>Bervenia, 0x6E == 43, 0x2F2 == 0</td></tr>
+    <tr><td class="mono">[537] 538–542</td><td>Argath at the Inner Court (battle)</td><td class="mono">127 · 519</td><td>After 394, the Keep battle</td></tr>
+    <tr><td class="mono">[543] 544–547</td><td>Cletienne and Meliadoul (battle)</td><td class="mono">31 · 520</td><td>Dorter, 0x6E == 51, 0x2F3 == 0, Meliadoul</td></tr>
+    <tr><td class="mono">[548] 549, [550] 551</td><td>Agrias visits Ovelia (551 with Lavian and Alicia)</td><td class="mono">45 · 521</td><td>Zeltennia Castle, 0x6F ≥ 16, Agrias, 0x2F4 == 0</td></tr>
+    <tr><td class="mono">[552] 553</td><td>Aliste abducts Reis</td><td class="mono">115 · 522</td><td>Lionel Castle, 0x6F ≥ 16, 0xAC, 0x2FD, 0x2F8 == 0, Beowulf, Reis</td></tr>
+    <tr><td class="mono">[554] 555–560</td><td>Lionel Castle Gate vs Aliste</td><td class="mono">12 · 523</td><td>After 553</td></tr>
+    <tr><td class="mono">[561] 562–567, [568] 569</td><td>Lionel Castle Oratory vs Bremondt and the Dark Dragon; Reis rescued</td><td class="mono">13 · 524, 11 · 525</td><td>After 560</td></tr>
+    <tr><td class="mono">[570] 571–577</td><td>Agrias and Orlandeau vs the Northern Sky deserters</td><td class="mono">91 · 526</td><td>Brigands' Den, 0x6F ≥ 16, Agrias, 0x2F6 == 0, 0x2FC</td></tr>
+    <tr><td class="mono">[578] 579</td><td>Agrias's Birthday</td><td class="mono">96 · 527</td><td>12 towns, 0x6F ≥ 13, Agrias, Mustadio, Lavian, Alicia, 0x2F9 == 0, gil ≥ 50,000, Cancer 1 (6/22)</td></tr>
+    <tr><td class="mono">[580] 581</td><td>Gariland tavern gossip</td><td class="mono">96 · 529</td><td>Built but not triggered: it is about WotL's multiplayer modes</td></tr>
+  </table></div>
+  <p>Rules keys run from 146 (Zeirchele) to 164 (Gariland) in event order; the birthday's is 163. Chain battles show a minimap: Argath is stage 3 of Limberry's four, and Beowulf and Reis use Lionel's two.</p>
+</section>
+
+<section id="status">
+  <h2>Status and open questions</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Part</th><th>State</th></tr>
+    <tr><td>Birthday, Balthier, Luso, Yardrow (with its battle surface), Bervenia, Lenalian Plateau, Cletienne, Agrias visits Ovelia, Beowulf and Reis, the Deserters, the rumors, all 40 items, map 127, the Limberry minimap display</td><td><span class="tag ok">tested in game</span></td></tr>
+    <tr><td>Zeirchele Falls as part of the Lionel sequence, and Argath as part of the Limberry sequence (both confirmed as scenes; the links need a save from before 195 / 394)</td><td><span class="tag warn">links untested</span></td></tr>
+    <tr><td>A continuous-battle stub with no SortieConfirm row still loading its own map</td><td><span class="tag warn">untested</span></td></tr>
+  </table></div>
+  <ul>
+    <li>WotL-only scenes each set one of vars 0x1AB–0x1B8. Nothing in either game seems to read them; the ports keep them.</li>
+    <li>Only three of the 40 items can be obtained. Shops, poaching, ENTD item bytes and steal/break are the next steps.</li>
+    <li>A brand-new minimap component (for a chain with markers of its own) is unproven.</li>
+    <li>The Dark Knight and Onion Knight jobs (0xA0/0xAF, 0xA1/0xA4) still exist in JobData unnamed and can't be reached, so no normal unit can equip the Fell Swords or the Onion gear.</li>
+  </ul>
+</section>
+
+<footer>From the WotL Restoration mod's research notes (<code>research/NOTES.md</code> and <code>research/ITEM_EXPANSION.md</code> in its source). Art from Spikedrose's FF Tactics Mobile Sprites, used with permission.</footer>
+</main>
